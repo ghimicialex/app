@@ -1,0 +1,59 @@
+<?php
+ob_start();
+require "facebook.php";
+$signed_request = $_REQUEST["signed_request"];
+list($encoded_sig, $payload) = explode('.', $signed_request, 2);
+$data = json_decode(base64_decode(strtr($payload, '-_', '+/')), true);
+$has_liked = $data["page"]["liked"];
+$facebook = new Facebook(array(
+    'appId' => 'APP ID', //ide a saját APP ID-t írjuk
+    'secret'  => 'APP SECRET', //ide a saját APP SECRET-et írjuk
+    'cookie' => true,
+    'fileUpload' => true //képfeltöltéshez szükséges
+));
+if($_POST['post_img_to_wall'] && $_POST['access_token']){
+    $current_access_token = $_POST['access_token'];
+    try {
+        //kép postolása az adott felhasználó fotói közé
+        //a meghatározott képaláírással
+        //az alkalmazás automatikusa létrehoz egy albumot
+        //ez az album az app neve alapján fog létrejönni
+        //az így feltöltött kép kerül ki a hírfolyamba
+        $img = "besocial.jpg"; //a kép, amit fel szeretnénk tölteni a falra, az index.php mellé kerüljön
+        $caption = "Ez a szöveg a kép alá fog kerülni";
+        //kép feltöltése a hírfolyamba
+        $facebook->api("/me/photos", "post", array('message' =>$caption, 'source' => '@'.$img, "access_token"=>$current_access_token));
+        echo "Sikeres küldés";
+    } catch (FacebookApiException $e) {
+        //nem sikerült a küldés
+        error_log($e);
+    }
+    exit();
+}
+if($has_liked){
+    //az adott látogató rajongó -> kérjük el a megfelelő engedélyeket
+    if(!$data["user_id"]) {
+        //még nem engedélyezte -> irányítsuk át az engedélyező képernyőre
+        $app_id = "0123456789"; //ide kerül a létrehozott alkalmazás ID-ja
+        $redirect_url = urlencode("https://www.facebook.com/..."); //ide kerül a tab URL
+        $scope = "publish_stream";
+        $auth_url = "http://www.facebook.com/dialog/oauth?client_id=" . $app_id . "&redirect_uri=" . $redirect_url . "&scope=" . $scope;
+        echo("<script> top.location.href='" . $auth_url . "'</script>");
+    } else {
+        //engedélyezte az alkalmazást
+        //jelenítsünk meg egy gombot, aminek a segítségével postolhat a falára
+        $access_token = $facebook->getAccessToken();
+        ?>
+        <form method="post" action="">
+            <input type="hidden" name="access_token" value="<?php echo $access_token; ?>" />
+            <input type="submit" name="post_img_to_wall" value="Kép feltöltése a hírfolyamomba" />
+        </form>
+        <?php
+    }
+} else {
+    //az adott látogató nem rajongó -> kérjük meg, hogy előbb legyen az
+    ?>
+    Üdvözöllek Idegen! Lépj be rajongóink közé.
+    <?php
+}
+?>
